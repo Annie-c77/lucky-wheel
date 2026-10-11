@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>幸運隨機轉盤 V1.0</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif;
+    }
+
+    /* 指針向下三角形狀 */
+    .wheel-pointer {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 18px solid transparent;
+      border-right: 18px solid transparent;
+      border-top: 32px solid #ef4444;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25));
+      z-index: 20;
+    }
+
+    /* 指針中心圓環裝飾 */
+    .wheel-pointer::after {
+      content: '';
+      position: absolute;
+      top: -30px;
+      left: -8px;
+      width: 16px;
+      height: 16px;
+      background: #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    /* 中獎彈出動畫 */
+    @keyframes popIn {
+      0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .animate-pop {
+      animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col justify-between antialiased">
+  <header class="py-6 border-b border-slate-200/80 bg-white shadow-xs">
+    <div class="max-w-4xl mx-auto px-4 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white shadow-sm font-bold text-lg">
+          🎡
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-900 leading-tight">幸運轉輪盤</h1>
+          <p class="text-xs text-slate-500 font-medium">100% 隨機抽選・日常選擇好幫手</p>
+        </div>
+      </div>
+      <span class="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+        V1.0
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 py-8 w-full flex-1 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+    
+    <!-- 轉盤展示區域 (左側) -->
+    <section class="md:col-span-7 flex flex-col items-center">
+      <div class="relative p-3 bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 mb-6">
+        <!-- 頂部指針 -->
+        <div class="wheel-pointer"></div>
+
+        <!-- 輪盤主體 Canvas -->
+        <canvas id="wheelCanvas" width="420" height="420" class="max-w-full h-auto rounded-full transition-transform ease-out"></canvas>
+
+        <!-- 輪盤中央裝飾按鈕軸心 -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div class="w-14 h-14 bg-white rounded-full shadow-md border-4 border-slate-50 flex items-center justify-center">
+            <div class="w-6 h-6 rounded-full bg-slate-200"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 控制按鈕 -->
+      <div class="w-full max-w-xs flex flex-col space-y-2.5">
+        <button id="spinBtn" class="w-full py-3.5 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold text-lg shadow-lg shadow-indigo-600/30 transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none flex items-center justify-center space-x-2">
+          <span>開始旋轉！</span>
+        </button>
+        <p id="tipMessage" class="text-xs text-center text-slate-400">點擊按鈕，讓命運替你決定</p>
+      </div>
+    </section>
+
+    <!-- 選項與結果設定區 (右側) -->
+    <section class="md:col-span-5 flex flex-col space-y-6">
+      
+      <!-- 結果提示卡片 -->
+      <div id="resultCard" class="hidden p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 shadow-sm animate-pop">
+        <span class="text-xs uppercase tracking-wider font-bold text-indigo-500 block mb-1">抽出結果</span>
+        <div class="flex items-baseline space-x-2">
+          <span class="text-2xl font-black text-indigo-950" id="resultText">--</span>
+          <span class="text-xs text-indigo-600 font-medium">就決定是它了！</span>
+        </div>
+      </div>
+
+      <!-- 選項管理卡片 -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-bold text-slate-800 text-base flex items-center space-x-1.5">
+            <span>選項清單</span>
+            <span id="itemCountBadge" class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold">0</span>
+          </h2>
+          <button id="resetBtn" class="text-xs text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+            重置預設
+          </button>
+        </div>
+
+        <!-- 新增輸入框 -->
+        <form id="addForm" class="flex gap-2 mb-4">
+          <input 
+            type="text" 
+            id="itemInput" 
+            placeholder="輸入選項名稱..." 
+            maxlength="15" 
+            class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+          />
+          <button 
+            type="submit" 
+            class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold transition-colors active:scale-95"
+          >
+            新增
+          </button>
+        </form>
+
+        <!-- 選項列表容器 -->
+        <div id="itemsContainer" class="flex flex-col space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+          <!-- 動態插入項目 -->
+        </div>
+
+        <!-- 錯誤提示訊息 (少於2個選項等) -->
+        <div id="noticeMsg" class="mt-3 text-xs text-rose-500 hidden font-medium"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="py-4 text-center text-xs text-slate-400 border-t border-slate-200/50">
+    純隨機演算法分配・絕無偏頗
+  </footer>
+
+  <script>
+    // 預設選項列表
+    const DEFAULT_ITEMS = [
+      '火鍋 🍲',
+      '拉麵 🍜',
+      '牛肉麵 🥩',
+      '義大利麵 🍝',
+      '手工水餃 🥟',
+      '起司漢堡 🍔',
+      '日式定食 🍱'
+    ];
+
+    // 和諧飽和的現代配色盤
+    const PALETTE = [
+      '#6366F1', // Indigo
+      '#EC4899', // Pink
+      '#F59E0B', // Amber
+      '#10B981', // Emerald
+      '#3B82F6', // Blue
+      '#8B5CF6', // Violet
+      '#F97316', // Orange
+      '#14B8A6', // Teal
+      '#EF4444', // Red
+      '#84CC16', // Lime
+    ];
+
+    let items = [...DEFAULT_ITEMS];
+    let currentAngle = 0; // 當前輪盤旋轉總角度 (度)
+    let isSpinning = false;
+
+    // DOM 元素引用
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx = canvas.getContext('2d');
+    const spinBtn = document.getElementById('spinBtn');
+    const addForm = document.getElementById('addForm');
+    const itemInput = document.getElementById('itemInput');
+    const itemsContainer = document.getElementById('itemsContainer');
+    const itemCountBadge = document.getElementById('itemCountBadge');
+    const resultCard = document.getElementById('resultCard');
+    const resultText = document.getElementById('resultText');
+    const resetBtn = document.getElementById('resetBtn');
+    const noticeMsg = document.getElementById('noticeMsg');
+
+    /**
+     * 繪製轉盤扇區與文字標籤
+     */
+    function drawWheel() {
+      const numItems = items.length;
+      const width = canvas.width;
+      const height = canvas.height;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const radius = width / 2 - 8;
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (numItems === 0) {
+        // 空狀態繪製
+        ctx.save();
+        ctx.fillStyle = '#f1f5f9';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '16px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('請至少新增 2 個選項', centerX, centerY);
+        ctx.restore();
+        return;
+      }
+
+      const arc = (Math.PI * 2) / numItems;
+
+      for (let i = 0; i < numItems; i++) {
+        const startAngle = i * arc;
+        const endAngle = startAngle + arc;
+
+        // 1. 繪製扇形背景
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = PALETTE[i % PALETTE.length];
+        ctx.fill();
+        
+        // 邊界微白線隔開
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        // 2. 繪製文字
+        ctx.translate(centerX, centerY);
+        ctx.rotate(startAngle + arc / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+        ctx.shadowBlur = 4;
+        
+        // 截斷過長文字
+        let displayText = items[i];
+        if (displayText.length > 8) {
+          displayText = displayText.substring(0, 7) + '…';
+        }
+        ctx.fillText(displayText, radius - 24, 5);
+
+        ctx.restore();
+      }
+
+      // 外外框圓環裝飾
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /**
+     * 刷新右側選項列表 UI
+     */
+    function renderItemList() {
+      itemCountBadge.textContent = items.length;
+      itemsContainer.innerHTML = '';
+
+      if (items.length < 2) {
+        showNotice('輪盤至少需要 2 個選項才能開始旋轉');
+        spinBtn.disabled = true;
+      } else {
+        hideNotice();
+        if (!isSpinning) spinBtn.disabled = false;
+      }
+
+      items.forEach((item, index) => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'flex items-center justify-between py-2 px-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl text-sm transition-colors group';
+
+        const colorDot = PALETTE[index % PALETTE.length];
+        itemRow.innerHTML = `
+          <div class="flex items-center space-x-2 truncate pr-2">
+            <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${colorDot}"></span>
+            <span class="font-medium text-slate-700 truncate">${escapeHtml(item)}</span>
+          </div>
+          <button 
+            type="button" 
+            onclick="deleteItem(${index})" 
+            title="刪除"
+            class="text-slate-400 hover:text-rose-500 p-1 rounded-lg transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        `;
+        itemsContainer.appendChild(itemRow);
+      });
+
+      drawWheel();
+    }
+
+    /**
+     * 開始旋轉輪盤
+     * 完全隨機分佈：隨機圈數 (5~8 圈) + 隨機角度 (0~360 度)
+     */
+    function spinWheel() {
+      if (isSpinning || items.length < 2) return;
+
+      isSpinning = true;
+      spinBtn.disabled = true;
+      resultCard.classList.add('hidden');
+      noticeMsg.classList.add('hidden');
+
+      // 旋轉秒數
+      const spinDuration = 4.5; // 秒數
+      
+      // 隨機旋轉圈數：5 到 8 圈 + 均勻隨機偏移度數
+      const randomExtraRounds = 5 + Math.floor(Math.random() * 4);
+      const randomDegree = Math.random() * 360; 
+      const totalRotationIncrement = (randomExtraRounds * 360) + randomDegree;
+      
+      currentAngle += totalRotationIncrement;
+
+      // 透過 CSS transition 達成極致平滑的減速效果 (cubic-bezier 模擬緩動阻尼)
+      canvas.style.transition = `transform ${spinDuration}s cubic-bezier(0.15, 0.95, 0.35, 1)`;
+      canvas.style.transform = `rotate(${currentAngle}deg)`;
+
+      // 動畫結束處理
+      setTimeout(() => {
+        isSpinning = false;
+        spinBtn.disabled = false;
+        calculateWinner(currentAngle);
+      }, spinDuration * 1000);
+    }
+
+    /**
+     * 計算指針所指的獲獎項目
+     * 指針固定在頂部 (270度 / 正上方)
+     */
+    function calculateWinner(totalAngle) {
+      const numItems = items.length;
+      const sliceAngle = 360 / numItems;
+
+      // 正規化角度到 0 ~ 359.99 度
+      const normalizedAngle = (totalAngle % 360 + 360) % 360;
+
+      // 由於 Canvas 0 度在 3 點鐘方向 (右側)，頂部指針在 270 度位置
+      // 輪盤順時針旋轉 normalizedAngle 度後，指針在圓盤坐標系中相對於起點的角度為：
+      const relativeAngle = (270 - (normalizedAngle % 360) + 360) % 360;
+
+      // 計算落在哪個扇形區間
+      const winningIndex = Math.floor(relativeAngle / sliceAngle);
+      const winner = items[winningIndex];
+
+      // 顯示獲獎結果
+      resultText.textContent = winner;
+      resultCard.classList.remove('hidden');
+    }
+
+    // 新增選項
+    addForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = itemInput.value.trim();
+      if (!val) return;
+
+      if (items.length >= 20) {
+        showNotice('最多支援新增 20 個選項');
+        return;
+      }
+
+      items.push(val);
+      itemInput.value = '';
+      renderItemList();
+    });
+
+    // 刪除個別選項
+    window.deleteItem = function(index) {
+      if (isSpinning) return;
+      items.splice(index, 1);
+      renderItemList();
+    };
+
+    // 重置為預設
+    resetBtn.addEventListener('click', () => {
+      if (isSpinning) return;
+      items = [...DEFAULT_ITEMS];
+      renderItemList();
+    });
+
+    // 點擊旋轉
+    spinBtn.addEventListener('click', spinWheel);
+
+    function showNotice(msg) {
+      noticeMsg.textContent = msg;
+      noticeMsg.classList.remove('hidden');
+    }
+
+    function hideNotice() {
+      noticeMsg.classList.add('hidden');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, function(m) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        }[m];
+      });
+    }
+
+    // 初始化繪製
+    renderItemList();
+  </script>
+</body>
+</html>
